@@ -1,4 +1,4 @@
-/usr/bin/python
+#!/usr/bin/python
 
 """
 Version: 0.2
@@ -23,10 +23,10 @@ push - will apply any txt files as updates to any txt file present in ./updates/
      - update is pushed to the fw or fwgrp denoted in the prefix of the txt file
 
 pull - options are pull target alias
-	 - pull target alias goes into timestamped file ./configs/fw1/alias1-timestamp1.txt
-	 - options to do diff between alias and last time stamp? 
-	 - output options
-	 
+         - pull target alias goes into timestamped file ./configs/fw1/alias1-timestamp1.txt
+         - options to do diff between alias and last time stamp? 
+         - output options
+         
 Specify default config and have the option of specifying other ones?
 
 
@@ -46,7 +46,8 @@ parser.add_argument('-u', action='store', dest='user', help='set username')
 parser.add_argument('-t', action='store', dest='target_string', help='string of targets')
 parser.add_argument('--init', action='store_true', help='initialize config file')
 parser.add_argument('--push', action='store_true', help='push out updates to firewalls')
-parser.add_argument('--pull', action='store', dest='alias', help='pulls output of specified command or set')
+parser.add_argument('--pull', action='store_true', help='pulls output of specified command or set')
+parser.add_argument('-a', action='store', dest='alias', help='specify alias')
 parser.add_argument('--stdout', action='store_true', help='output to stdout instead of to file')
 
 # Declare global scope variables
@@ -65,7 +66,7 @@ if not user and (results.push or results.alias):
     print "Error, must specify user by using the user flag and parameter \"-u username\""
     exit(0)
 elif user:
-	passwd = getpass.getpass()
+        passwd = getpass.getpass()
 
 
 def parse_script_config():
@@ -79,117 +80,191 @@ def parse_script_config():
 
         fwgrp_parse = re.match(r"fwgrp\s(\w+)\s(.*?)", line)
         if fwgrp_parse:
-			fwgrp_list = []
-			fwgrp[fwgrp_parse.group(1)] = fwgrp_parse.group(2).split(',')
-        cmd = re.match("alias\s(\w+)\scommand\s\<(.*?)\>", line)
+                        fwgrp_list = []
+                        fwgrp[fwgrp_parse.group(1)] = fwgrp_parse.group(2).split(',')
+        cmd = re.match(r"alias\s(\w+)\scommand\s\<(.*?)\>", line)
         if cmd:
-			#
+                        #
             command[cmd.group(1)] = cmd.group(2).replace(',', '\n')
 
 
 def get_timestamp():
-	d = datetime.datetime.now()
-	return d.strftime('%Y-%m-%d_%Hh%Mm%Ss')
+        d = datetime.datetime.now()
+        return d.strftime('%Y-%m-%d_%Hh%Mm%Ss')
+
 
 def initialize():
-	# Based on script config, create directory structure
-	# 
-	
-	parse_script_config()
-	os.mkdir(cfgs)
-	os.mkdir(upds)
-	for fw,ip in firewall.iteritems():
-		newdir1 = cfgs + '/' + fw
-		os.mkdir(newdir1)		
-		for a,c in command.iteritems():
-			newdir2 = newdir1 + '/' + a
-                        print newdir2
-			os.mkdir(newdir2)
-	
-if results.init:
-	initialize()
+        # Based on script config, create directory structure
+        # 
 
-def exec_ssh_conn(cmds, targets):
-	output = []
+        parse_script_config()
+        os.mkdir(cfgs)
+        os.mkdir(upds)
+        for fw,ip in firewall.iteritems():
+                newdir1 = cfgs + '/' + fw
+                os.mkdir(newdir1)
+                #for a,c in command.iteritems():
+                #       newdir2 = newdir1 + '/' + a
+         #               print newdir2
+                        #os.mkdir(newdir2)
+
+if results.init:
+        initialize()
+
+def exec_ssh_conn(cmds, targets, pull_req=False, opts=""):
+        output = []
         firewalls = {}
-        if targets == "all":
+        if not pull_req:
+            if targets == "all":
                 # Setup paramiko ssh client
-			ssh = paramiko.SSHClient()
-			ssh.set_missing_host_key_policy( paramiko.AutoAddPolicy())
-			for k,v in firewall.items():
-				ssh.connect(v, username=user,password=passwd)
-				c = '\n'.join(cmds)
-				stdin, stdout, stderr = ssh.exec_command(c)
-				output = stdout.readlines()
-		
-				ssh.close()
-				for line in output:
-					line = line.strip('\n')
-					print line
+                            ssh = paramiko.SSHClient()
+                            ssh.set_missing_host_key_policy( paramiko.AutoAddPolicy())
+                            for k,v in firewall.items():
+                                    ssh.connect(v, username=user,password=passwd)
+                                    c = '\n'.join(cmds)
+                                    stdin, stdout, stderr = ssh.exec_command(c)
+                                    output = stdout.readlines()
+
+                                    ssh.close()
+                                    for line in output:
+                                            line = line.strip('\n')
+                                            print line
+
+
+            else:
+                            # Check target for individual firewalls
+                            for k,v in firewall.items():
+                                    if k == targets:
+                                            ssh = paramiko.SSHClient()
+                                            ssh.set_missing_host_key_policy( paramiko.AutoAddPolicy())
+                                            ssh.connect(v, username=user,password=passwd)
+                                            c = '\n'.join(cmds)
+                                            stdin, stdout, stderr = ssh.exec_command(c)
+                                            output = stdout.readlines()
+
+                                            ssh.close()
+                                            for line in output:
+                                                        line = line.strip('\n')
+                                                        print line
         else:
-			# Check target for individual firewalls
-			for k,v in firewall.items():
-				if k == targets:
-					ssh = paramiko.SSHClient()
-					ssh.set_missing_host_key_policy( paramiko.AutoAddPolicy())
-					ssh.connect(v, username=user,password=passwd)
-					c = '\n'.join(cmds)
-					stdin, stdout, stderr = ssh.exec_command(c)
-					output = stdout.readlines()
-		
-					ssh.close()
-					for line in output:
-						line = line.strip('\n')
-						print line
+                        #Is a pull request
+
+                        conf_path = ""
+                        if targets == "all":
+                # Setup paramiko ssh client
+                            ssh = paramiko.SSHClient()
+                            ssh.set_missing_host_key_policy( paramiko.AutoAddPolicy())
+                            for k,v in firewall.items():
+                                    ssh.connect(v, username=user,password=passwd)
+                                    stdin, stdout, stderr = ssh.exec_command(cmds)
+                                    output = stdout.readlines()
+
+                                    ssh.close()
+                                    for a,c in command.items():
+                                                if c == cmds:
+                                                        conf_path = cfgs + '/' + k + '/' + a + '_' + get_timestamp()
+                                                        fout = open(conf_path, "wb")
+                                                        for line in output:
+                                                                fout.write(line)
+                                                        fout.close()
+                                                        break
+
+                                    for line in output:
+                                            line = line.strip('\n')
+                                            print line
+
+
+                        else:
+                            # Check target for individual firewalls
+                            for k,v in firewall.items():
+                                    if k == targets:
+                                                ssh = paramiko.SSHClient()
+                                                ssh.set_missing_host_key_policy( paramiko.AutoAddPolicy())
+                                                ssh.connect(v, username=user,password=passwd)
+                                                stdin, stdout, stderr = ssh.exec_command(cmds)
+                                                output = stdout.readlines()
+
+                                                ssh.close()
+                                                for a,c in command.items():
+                                                        if c == cmds:
+                                                                conf_path = cfgs + '/' + k + '/' + a + '_' + get_timestamp()
+                                                                fout = open(conf_path, "wb")
+                                                                for line in output:
+                                                                        fout.write(line)
+                                                                fout.close()
+                                                                break
+                                                for line in output:
+                                                        line = line.strip('\n')
+                                                        print line
     
-	print "END\n"
-	
+        print "END\n"
+
 def push_update():
-	parse_script_config()
-	# Take txt files in update folder and push them as updates to firewalls
-	# Then move the txt files into a date revisioned folder
-	
-	# Create a list of commands from any files in the updates directory ending in .txt
-	old_paths = {}
-	valid_updates = {}
-	update_files = []
-	update_files = os.listdir(upds)
-	for f in update_files:
-	    prefix_check = re.search("(\w+)_.*\.txt", f)
-	    if prefix_check:
-			valid_updates[prefix_check.group(1)] = f
-			
-	for prefix, upd in valid_updates.items():
-		fwgrp_check = False
-		cfg_path = upds + '/' + upd
-		update_commands = []
-		old_paths[upd] = cfg_path
-		with open(cfg_path, 'r') as f:
-			for line in f:
-				cfg_parse = re.search("(\S.*\S)", line)
-				if cfg_parse:
-					update_commands.append(cfg_parse.group(1))
-		
-		for k,v in fwgrp.items():
-			if k == prefix:
-				# fwgrp
-				fwgrp_check = True
-				for fw in fwgrp[prefix]:
-					exec_ssh_conn(update_commands, fw)
-				
-		if not fwgrp_check:
-			exec_ssh_conn(update_commands, prefix)
-		
-	for n, old_pth in old_paths.items():
-		os.rename(old_pth, 'configs/' + n + '_' + user + '_' + get_timestamp())
-		
-	# Now have commands put into update_commands list
-	# Need to connect to firewalls and run each command in list
-	# Need to capture output and put into a timestamped file
-	
+        parse_script_config()
+        # Take txt files in update folder and push them as updates to firewalls
+        # Then move the txt files into a date revisioned folder
+
+        # Create a list of commands from any files in the updates directory ending in .txt
+        old_paths = {}
+        valid_updates = {}
+        update_files = []
+        update_files = os.listdir(upds)
+        for f in update_files:
+            prefix_check = re.search("(\w+)_.*\.txt", f)
+            if prefix_check:
+                        valid_updates[prefix_check.group(1)] = f
+
+        for prefix, upd in valid_updates.items():
+                fwgrp_check = False
+                cfg_path = upds + '/' + upd
+                update_commands = []
+                old_paths[upd] = cfg_path
+                with open(cfg_path, 'r') as f:
+                        for line in f:
+                                cfg_parse = re.search("(\S.*\S)", line)
+                                if cfg_parse:
+                                        update_commands.append(cfg_parse.group(1))
+
+                for k,v in fwgrp.items():
+                        if k == prefix:
+                                # fwgrp
+                                fwgrp_check = True
+                                for fw in fwgrp[prefix]:
+                                        exec_ssh_conn(update_commands, fw)
+
+                if not fwgrp_check:
+                        exec_ssh_conn(update_commands, prefix)
+
+        for n, old_pth in old_paths.items():
+                os.rename(old_pth, 'configs/' + n + '_' + user + '_' + get_timestamp())
+
+        # Now have commands put into update_commands list
+        # Need to connect to firewalls and run each command in list
+        # Need to capture output and put into a timestamped file
+
 
 def pull_request(target, alias):
-        pass
+        parse_script_config()
+        opts=""
+        fwgrp_check = False
+        fw_cmd = ""
+        # parse alias
+        for k, cmd in command.items():
+                if k == alias:
+                        fw_cmd = cmd
+
+        # Check target for fwgrp
+        for k,v in fwgrp.items():
+                        if k == target:
+                                # fwgrp
+                                fwgrp_check = True
+                                for fw in fwgrp[prefix]:
+                                        exec_ssh_conn(fw_cmd, fw, True, opts)
+        if not fwgrp_check:
+                exec_ssh_conn(fw_cmd, target, True, opts)
 
 if results.push:
-	push_update()
+        push_update()
+
+if results.pull and results.target_string and user:
+        pull_request(results.target_string, results.alias)
